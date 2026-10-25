@@ -88,6 +88,40 @@ describe("chat completions wire — non-streaming", () => {
     expect(result.response?.modelId).toBe("gpt-5-mini-2025-08-07");
   });
 
+  it("joins text-only user parts with a blank line so fences stay intact", async () => {
+    const binding = fakeBinding(() =>
+      jsonResponse({
+        choices: [
+          {
+            finish_reason: "stop",
+            message: { content: "ok", role: "assistant" }
+          }
+        ]
+      })
+    );
+    const ai = createAI({ binding: asAi(binding) });
+    await ai(MODEL).doGenerate(
+      callOptions({
+        prompt: [
+          {
+            content: [
+              { text: "Review this file:", type: "text" },
+              { text: "```ts\nconst a = 1\n```", type: "text" }
+            ],
+            role: "user"
+          }
+        ]
+      })
+    );
+
+    const messages = binding.calls[0]?.input.messages as
+      | { content: string }[]
+      | undefined;
+    expect(messages?.[0]?.content).toBe(
+      "Review this file:\n\n```ts\nconst a = 1\n```"
+    );
+  });
+
   it("survives an empty answer when reasoning eats the budget (live gpt-5-mini capture)", async () => {
     // Captured live: with a small `max_completion_tokens`, gpt-5-mini spends
     // the whole budget on hidden reasoning and answers with empty content and

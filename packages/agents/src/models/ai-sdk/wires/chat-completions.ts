@@ -199,9 +199,11 @@ function userContent(
     );
   }
   if (onlyText) {
+    // Blank-line join keeps fence boundaries when apps attach notes/files as
+    // separate text parts (a bare join glues `Review this file:` onto ````).
     return parts
       .map((part) => (part.type === "text" ? part.text : ""))
-      .join("");
+      .join("\n\n");
   }
   return parts;
 }
