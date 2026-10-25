@@ -578,6 +578,43 @@ describe("core compat — stream normalization", () => {
     ]);
   });
 
+  it("coerces numeric delta content, reasoning, and native response to strings", async () => {
+    const out = await normalize(
+      [
+        chunk({ content: 0.005 }),
+        chunk({ reasoning_content: 1 }),
+        JSON.stringify({ response: 2 }),
+        JSON.stringify({
+          response: "",
+          usage: { completion_tokens: 3, prompt_tokens: 2 }
+        }),
+        "[DONE]"
+      ],
+      GLM
+    );
+    expect(out).toMatchObject([
+      {
+        choices: [
+          { delta: { content: "0.005" }, finish_reason: null, index: 0 }
+        ]
+      },
+      {
+        choices: [
+          {
+            delta: { reasoning_content: "1" },
+            finish_reason: null,
+            index: 0
+          }
+        ]
+      },
+      {
+        choices: [{ delta: { content: "2" }, finish_reason: null, index: 0 }]
+      },
+      { choices: [], usage: { completion_tokens: 3, prompt_tokens: 2 } },
+      "[DONE]"
+    ]);
+  });
+
   it("lifts native text deltas and tool calls, and synthesizes the finish reason", async () => {
     const out = await normalize(
       [

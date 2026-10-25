@@ -53,8 +53,21 @@ function stripEchoSuffix(chunk: Record_, modelId: string): Record_ {
     : chunk;
 }
 
+/** Coerce a streamed text field; Workers AI sometimes emits JSON numbers. */
+function coerceStreamText(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return undefined;
+}
+
 function normalizeDelta(delta: Record_, relabelReasoning: boolean): Record_ {
   const out: Record_ = { ...delta };
+  const content = coerceStreamText(out.content);
+  if (content !== undefined) out.content = content;
+  const reasoningContent = coerceStreamText(out.reasoning_content);
+  if (reasoningContent !== undefined) out.reasoning_content = reasoningContent;
+  const reasoningAlt = coerceStreamText(out.reasoning);
+  if (reasoningAlt !== undefined) out.reasoning = reasoningAlt;
   const reasoning =
     typeof out.reasoning_content === "string" && out.reasoning_content !== ""
       ? out.reasoning_content
@@ -223,7 +236,7 @@ export function normalizeChatCompletionsStream(
 
     // Native Workers AI events.
     if ("response" in chunk || "tool_calls" in chunk) {
-      const text = chunk.response;
+      const text = coerceStreamText(chunk.response);
       const hasText = typeof text === "string" && text !== "";
       const calls = Array.isArray(chunk.tool_calls)
         ? chunk.tool_calls
