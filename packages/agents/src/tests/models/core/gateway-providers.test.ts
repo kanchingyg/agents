@@ -70,6 +70,11 @@ describe("core gateway providers — routing", () => {
         "acme/gpt/chat/completions"
       ],
       [
+        "https://acme.openai.azure.com/openai/v1/responses?api-version=2024-02-15-preview",
+        "azure-openai",
+        "acme/openai/responses?api-version=2024-02-15-preview"
+      ],
+      [
         "https://api.cloudflare.com/client/v4/accounts/abc/ai/v1/chat/completions",
         "workers-ai",
         "v1/chat/completions"
@@ -140,6 +145,22 @@ describe("core gateway providers — routing", () => {
     expect(() =>
       requireGatewayProvider("https://api.acme.test/v1/chat")
     ).toThrow(/anthropic/);
+  });
+
+  it("does not match Azure v1 paths other than responses", () => {
+    expect(
+      resolveGatewayProvider(
+        "https://acme.openai.azure.com/openai/v1/chat/completions?api-version=2024-02-15-preview"
+      )
+    ).toBe(undefined);
+  });
+
+  it("points unmatched Azure URLs at useDeploymentBasedUrls", () => {
+    expect(() =>
+      requireGatewayProvider(
+        "https://acme.openai.azure.com/openai/v1/chat/completions"
+      )
+    ).toThrow(/useDeploymentBasedUrls: true/);
   });
 });
 

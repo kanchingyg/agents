@@ -135,13 +135,25 @@ function parseUrl(url: string): URL | undefined {
 
 /**
  * Azure names the deployment in the path; the gateway names it in the
- * endpoint as `<resource>/<deployment>/<rest>`.
+ * endpoint as `<resource>/<deployment>/<rest>`. Azure also exposes a
+ * non-deployment v1 Responses route (`/openai/v1/responses...`) which the
+ * gateway expects as `<resource>/openai/responses...`. Other v1 paths have
+ * no non-deployment Azure route and stay unmatched.
  */
 function azureEndpoint(url: URL): string | undefined {
   const resource = /^([^.]+)\.openai\.azure\.com$/.exec(url.host)?.[1];
-  const rest = /^\/openai\/deployments\/([^/]+)\/(.+)$/.exec(url.pathname);
-  if (resource === undefined || rest === null) return undefined;
-  return `${resource}/${rest[1]}/${rest[2]}${url.search}`;
+  if (resource === undefined) return undefined;
+  const deployment = /^\/openai\/deployments\/([^/]+)\/(.+)$/.exec(
+    url.pathname
+  );
+  if (deployment !== null) {
+    return `${resource}/${deployment[1]}/${deployment[2]}${url.search}`;
+  }
+  const v1Responses = /^\/openai\/v1\/(responses(?:\/.*)?)$/.exec(url.pathname);
+  if (v1Responses !== null) {
+    return `${resource}/openai/${v1Responses[1]}${url.search}`;
+  }
+  return undefined;
 }
 
 /**
@@ -295,7 +307,17 @@ export function resolveGatewayProvider(
 export function requireGatewayProvider(url: string): ResolvedGatewayProvider {
   const resolved = resolveGatewayProvider(url);
   if (resolved !== undefined) return resolved;
-  const host = parseUrl(url)?.host ?? url;
+  const parsed = parseUrl(url);
+  const host = parsed?.host ?? url;
+  const matched =
+    parsed === undefined
+      ? undefined
+      : GATEWAY_PROVIDERS.find((provider) => provider.host.test(parsed.host));
+  if (matched?.name === "azure-openai") {
+    throw new TypeError(
+      `AI Gateway could not route ${url} for azure-openai. Deployment-based URLs (/openai/deployments/<name>/...) and the v1 Responses API (/openai/v1/responses...) are supported; for other Azure paths set useDeploymentBasedUrls: true on @ai-sdk/azure. The supported providers are ${GATEWAY_PROVIDER_NAMES.join(", ")}.`
+    );
+  }
   throw new TypeError(
     `AI Gateway has no provider for ${host}. Requests are routed by host; the supported providers are ${GATEWAY_PROVIDER_NAMES.join(", ")}.`
   );
