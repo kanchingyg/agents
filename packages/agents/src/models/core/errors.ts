@@ -167,6 +167,19 @@ function messageOf(error: unknown): string {
 }
 
 /**
+ * The Workers AI binding sometimes marks a thrown error as retryable with a
+ * boolean `retryable` property (for example `"Network connection lost."`).
+ * Honour that flag when present; it is more specific than the code table.
+ */
+function bindingRetryable(error: unknown): boolean | undefined {
+  if (error === null || typeof error !== "object" || !("retryable" in error)) {
+    return undefined;
+  }
+  const retryable = (error as { retryable: unknown }).retryable;
+  return typeof retryable === "boolean" ? retryable : undefined;
+}
+
+/**
  * Extracts a Workers AI internal error code from a thrown binding error. The
  * binding reports codes inside the message text (`"3040: Capacity temporarily
  * exceeded"`) rather than as a status, so only known codes are accepted — an
@@ -202,15 +215,22 @@ export function normalizeThrownError(
 
   const code = bindingErrorCode(error);
   const status = code === undefined ? undefined : BINDING_CODE_STATUS[code];
+  const retryableFlag = bindingRetryable(error);
   return new CloudflareAIError({
     cause: error,
     code: classifyStatus(status),
     data: code === undefined ? undefined : { code },
-    // A recognised code decides for itself. Everything else is not worth
+    // The binding's own `retryable` flag wins when present. Otherwise a
+    // recognised code decides for itself. Everything else is not worth
     // retrying: the binding is the only backend, so a throw with no status is
     // a programming error rather than a transport failure, and re-running it
     // on every fallback leg helps nobody.
-    isRetryable: status === undefined ? false : isRetryableStatus(status),
+    isRetryable:
+      retryableFlag !== undefined
+        ? retryableFlag
+        : status === undefined
+          ? false
+          : isRetryableStatus(status),
     message: messageOf(error),
     model: context.model,
     requestBodyValues: context.requestBodyValues,

@@ -130,6 +130,43 @@ describe("thrown binding failures", () => {
     expect((caught as CloudflareAIError).isRetryable).toBe(false);
   });
 
+  it("retries a binding error flagged retryable: true with no code", async () => {
+    const binding = fakeBinding(() => {
+      throw Object.assign(new Error("Network connection lost."), {
+        retryable: true
+      });
+    });
+    const ai = createAI({ binding: asAi(binding) });
+    let caught: unknown;
+    try {
+      await ai(MODEL).doGenerate(callOptions());
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(CloudflareAIError);
+    expect((caught as CloudflareAIError).isRetryable).toBe(true);
+  });
+
+  it("honours retryable: false over a retryable binding code", async () => {
+    const binding = fakeBinding(() => {
+      throw Object.assign(new Error("3040: Capacity temporarily exceeded"), {
+        retryable: false
+      });
+    });
+    const ai = createAI({ binding: asAi(binding) });
+    let caught: unknown;
+    try {
+      await ai(MODEL).doGenerate(callOptions());
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(CloudflareAIError);
+    expect((caught as CloudflareAIError).status).toBe(429);
+    expect((caught as CloudflareAIError).isRetryable).toBe(false);
+  });
+
   it("requires the AI binding: there is no HTTP transport", () => {
     expect(() => createAI({} as AISettings)).toThrow(/requires \{ binding \}/);
   });
